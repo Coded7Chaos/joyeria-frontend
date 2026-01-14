@@ -40,8 +40,19 @@ export function Catalogo({ datos, categorias, agrupaciones }: CatalogoProps) {
     setShowForm(true);
   };
 
-  const handleDeleteGroup = (id: string) => {
-    setGroups(prev => prev.filter(g => g.id !== id));
+  const handleDeleteGroup = async (id: string) => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/grupos-producto/${id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        throw new Error('Error al eliminar el grupo');
+      }
+      setGroups(prev => prev.filter(g => g.id !== id));
+    } catch (error) {
+      console.error(error);
+      alert('No se pudo eliminar el grupo. Intenta otra vez.');
+    }
   };
 
   const handleAddGroup = (category: string) => {

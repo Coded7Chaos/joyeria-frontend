@@ -8,23 +8,24 @@ interface ImageWithFallbackProps {
 }
 
 export function ImageWithFallback({ src, alt, className }: ImageWithFallbackProps) {
+  const fallbackSrc = "https://via.placeholder.com/400x300.png?text=No+Imagen";
   const [error, setError] = useState(false);
-  const [imgSrc, setImgSrc] = useState(src);
+  const [imgSrc, setImgSrc] = useState(src || fallbackSrc);
 
   useEffect(() => {
-    setImgSrc(src);
+    setImgSrc(src || fallbackSrc);
     setError(false);
-  }, [src]);
+  }, [src, fallbackSrc]);
 
   const handleOnError = () => {
     setError(true);
   };
 
-  const fallbackSrc = "https://via.placeholder.com/400x300.png?text=No+Imagen";
+  const resolvedSrc = error ? fallbackSrc : imgSrc;
 
   return (
     <img
-      src={error ? fallbackSrc : imgSrc}
+      src={resolvedSrc}
       alt={alt}
       className={className}
       onError={handleOnError}

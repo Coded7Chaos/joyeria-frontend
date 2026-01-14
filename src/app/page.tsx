@@ -30,7 +30,7 @@ async function getCatalogo(): Promise<ProductGroup[]> {
       length: undefined,
       weight: p.peso,
       stock: p.stock,
-      price: p.precio,
+      price: typeof p.precio === 'number' ? p.precio : Number(p.precio),
       imageUrl: p.urlFoto || undefined,
       sku: p.sku || undefined,
       isNew: false,

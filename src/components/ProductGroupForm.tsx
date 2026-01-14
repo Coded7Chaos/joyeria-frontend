@@ -1,6 +1,6 @@
 "use client"
 import { useState, useEffect, useRef } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { Check, X, Plus, Trash2 } from "lucide-react";
 import { ProductGroup, ProductVariant } from "./ProductGroupCard";
 
 interface ProductGroupFormProps {
@@ -41,9 +41,14 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
   const [tallas, setTallas] = useState<Array<{ id: number; talla: string }>>([]);
   const [tallasLoading, setTallasLoading] = useState(false);
   const [tallasError, setTallasError] = useState<string | null>(null);
-  const [colores, setColores] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [colores, setColores] = useState<Array<{ id: number; nombre: string; codigoHex?: string }>>([]);
   const [coloresLoading, setColoresLoading] = useState(false);
   const [coloresError, setColoresError] = useState<string | null>(null);
+  const [creatingColorFor, setCreatingColorFor] = useState<Record<string, boolean>>({});
+  const [newColorNames, setNewColorNames] = useState<Record<string, string>>({});
+  const [newColorHexes, setNewColorHexes] = useState<Record<string, string>>({});
+  const [newColorErrors, setNewColorErrors] = useState<Record<string, string>>({});
+  const [savingColorFor, setSavingColorFor] = useState<Record<string, boolean>>({});
   const [uploadingVariantId, setUploadingVariantId] = useState<string | null>(null);
   const [variantUploadErrors, setVariantUploadErrors] = useState<Record<string, string>>({});
 
@@ -194,10 +199,72 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
   };
 
   const handleVariantColorChange = (variantId: string, colorIdValue: string) => {
+    if (colorIdValue === '__new__') {
+      setCreatingColorFor(prev => ({ ...prev, [variantId]: true }));
+      setNewColorNames(prev => ({ ...prev, [variantId]: '' }));
+      setNewColorHexes(prev => ({ ...prev, [variantId]: '#000000' }));
+      setNewColorErrors(prev => ({ ...prev, [variantId]: '' }));
+      handleVariantChange(variantId, 'colorId', undefined);
+      handleVariantChange(variantId, 'color', '');
+      return;
+    }
+
     const colorId = Number(colorIdValue);
     const selected = colores.find((color) => color.id === colorId);
+    setCreatingColorFor(prev => ({ ...prev, [variantId]: false }));
+    setNewColorErrors(prev => ({ ...prev, [variantId]: '' }));
     handleVariantChange(variantId, 'colorId', Number.isNaN(colorId) ? undefined : colorId);
     handleVariantChange(variantId, 'color', selected?.nombre ?? '');
+  };
+
+  const handleNewColorNameChange = (variantId: string, value: string) => {
+    setNewColorNames(prev => ({ ...prev, [variantId]: value }));
+  };
+
+  const handleNewColorHexChange = (variantId: string, value: string) => {
+    setNewColorHexes(prev => ({ ...prev, [variantId]: value }));
+  };
+
+  const cancelNewColor = (variantId: string) => {
+    setCreatingColorFor(prev => ({ ...prev, [variantId]: false }));
+    setNewColorNames(prev => ({ ...prev, [variantId]: '' }));
+    setNewColorHexes(prev => ({ ...prev, [variantId]: '#000000' }));
+    setNewColorErrors(prev => ({ ...prev, [variantId]: '' }));
+  };
+
+  const saveNewColor = async (variantId: string) => {
+    const rawName = newColorNames[variantId] || '';
+    const nombre = rawName.trim();
+    if (!nombre) {
+      setNewColorErrors(prev => ({ ...prev, [variantId]: 'Ingresa un color' }));
+      return;
+    }
+
+    const codigoHex = newColorHexes[variantId] || '#000000';
+
+    setSavingColorFor(prev => ({ ...prev, [variantId]: true }));
+    setNewColorErrors(prev => ({ ...prev, [variantId]: '' }));
+
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/colores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre, codigoHex }),
+      });
+      if (!res.ok) {
+        throw new Error('Error al crear el color');
+      }
+      const created = await res.json();
+      setColores(prev => [...prev, created]);
+      handleVariantChange(variantId, 'colorId', created.id);
+      handleVariantChange(variantId, 'color', created.nombre ?? nombre);
+      cancelNewColor(variantId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo crear el color';
+      setNewColorErrors(prev => ({ ...prev, [variantId]: message }));
+    } finally {
+      setSavingColorFor(prev => ({ ...prev, [variantId]: false }));
+    }
   };
 
   const handleVariantTallaChange = (variantId: string, tallaIdValue: string) => {
@@ -314,15 +381,13 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
           } = {
             idGrupoProducto: groupId,
             idColor: variant.colorId,
-            precio: variant.price,
-            stock: variant.stock,
+            precio: Number(variant.price),
+            stock: Number(variant.stock),
             sku: variant.sku || undefined,
             urlFoto: variant.imageUrl || undefined,
           };
 
-          if (category === "Anillos") {
-            payload.idTalla = variant.tallaId ?? null;
-          } else if (variant.tallaId) {
+          if (category === "Anillos" && variant.tallaId) {
             payload.idTalla = variant.tallaId;
           }
 
@@ -356,14 +421,14 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
             sku?: string | null;
             urlFoto?: string | null;
           } = {
-            precio: variant.price,
-            stock: variant.stock,
+            precio: Number(variant.price),
+            stock: Number(variant.stock),
           };
 
           if (variant.colorId) {
             updatePayload.idColor = variant.colorId;
           }
-          if (category === "Anillos") {
+          if (category === "Anillos" && variant.tallaId !== undefined) {
             updatePayload.idTalla = variant.tallaId ?? null;
           }
           if (variant.sku !== undefined) {
@@ -560,25 +625,77 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
                   <div className={`grid grid-cols-2 ${category === "Anillos" ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-3`}>
                     <div>
                       <label className={`block mb-1 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Color</label>
-                      <select
-                        value={variant.colorId ?? ''}
-                        onChange={(e) => handleVariantColorChange(variant.id, e.target.value)}
-                        required
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:outline-none ${
-                          darkMode 
-                            ? 'bg-gray-600 border-gray-500 text-white focus:ring-purple-500' 
-                            : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
-                        }`}
-                      >
-                        <option value="">{coloresLoading ? 'Cargando colores...' : 'Selecciona un color'}</option>
-                        {colores.map((color) => (
-                          <option key={color.id} value={color.id}>
-                            {color.nombre}
+                      {creatingColorFor[variant.id] ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={newColorHexes[variant.id] ?? '#000000'}
+                            onChange={(e) => handleNewColorHexChange(variant.id, e.target.value)}
+                            className="h-10 w-10 cursor-pointer rounded-full border border-gray-300 bg-transparent p-0"
+                            aria-label="Seleccionar color"
+                          />
+                          <input
+                            type="text"
+                            value={newColorNames[variant.id] ?? ''}
+                            onChange={(e) => handleNewColorNameChange(variant.id, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                void saveNewColor(variant.id);
+                              }
+                            }}
+                            placeholder="Nuevo color"
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:outline-none ${
+                              darkMode 
+                                ? 'bg-gray-600 border-gray-500 text-white focus:ring-purple-500' 
+                                : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
+                            }`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => saveNewColor(variant.id)}
+                            className="rounded-md border border-green-400 text-green-600 p-2 hover:bg-green-50"
+                            title="Guardar color"
+                            disabled={savingColorFor[variant.id]}
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cancelNewColor(variant.id)}
+                            className="rounded-md border border-red-300 text-red-500 p-2 hover:bg-red-50"
+                            title="Cancelar"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <select
+                          value={variant.colorId ?? ''}
+                          onChange={(e) => handleVariantColorChange(variant.id, e.target.value)}
+                          required
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:outline-none ${
+                            darkMode 
+                              ? 'bg-gray-600 border-gray-500 text-white focus:ring-purple-500' 
+                              : 'bg-white border-gray-300 text-gray-900 focus:ring-blue-500'
+                          }`}
+                        >
+                          <option value="">{coloresLoading ? 'Cargando colores...' : 'Selecciona un color'}</option>
+                          {colores.map((color) => (
+                            <option key={color.id} value={color.id}>
+                              {color.nombre}
+                            </option>
+                          ))}
+                          <option value="__new__" className="text-green-600 font-medium">
+                            + Añadir nuevo color
                           </option>
-                        ))}
-                      </select>
+                        </select>
+                      )}
                       {coloresError && (
                         <p className="mt-1 text-xs text-red-500">{coloresError}</p>
+                      )}
+                      {newColorErrors[variant.id] && (
+                        <p className="mt-1 text-xs text-red-500">{newColorErrors[variant.id]}</p>
                       )}
                     </div>
 
