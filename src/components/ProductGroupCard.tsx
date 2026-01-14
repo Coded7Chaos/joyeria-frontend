@@ -199,7 +199,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
           >
             <button
               type="button"
-              className="absolute right-2 top-2 text-gray-300 hover:text-gray-100"
+              className="absolute right-2 top-2 z-20 text-gray-300 hover:text-gray-100"
               onClick={() => setActiveIndex(null)}
               aria-label="Cerrar"
             >
@@ -209,7 +209,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
             {hasMultiple && (
               <button
                 type="button"
-                className="absolute left-4 top-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-white/0 text-gray-400 hover:bg-black/15 flex items-center justify-center transition-colors"
+                className="absolute left-4 top-1/2 z-20 -translate-y-1/2 h-16 w-16 rounded-full bg-white/0 text-gray-400 hover:bg-black/15 flex items-center justify-center transition-colors"
                 onClick={goPrev}
                 aria-label="Anterior"
               >
@@ -220,7 +220,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
             {hasMultiple && (
               <button
                 type="button"
-                className="absolute right-4 top-1/2 -translate-y-1/2 h-16 w-16 rounded-full bg-white/0 text-gray-400 hover:bg-black/15 flex items-center justify-center transition-colors"
+                className="absolute right-4 top-1/2 z-20 -translate-y-1/2 h-16 w-16 rounded-full bg-white/0 text-gray-400 hover:bg-black/15 flex items-center justify-center transition-colors"
                 onClick={goNext}
                 aria-label="Siguiente"
               >
@@ -228,7 +228,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
               </button>
             )}
 
-            <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 z-0 overflow-hidden">
               <div
                 className="flex h-full transition-transform duration-300 ease-out"
                 style={{ transform: `translateX(-${activeIndex * 100}%)` }}
@@ -248,7 +248,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
               </div>
             </div>
 
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2">
+            <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 flex items-center gap-2">
               {variantsWithImages.map((_, index) => (
                 <button
                   key={index}
@@ -266,7 +266,7 @@ export function ProductGroupCard({ group, onEdit, onDelete, darkMode }: ProductG
 
             <button
               type="button"
-              className="absolute bottom-4 right-4 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-gray-900 shadow-lg hover:bg-white"
+              className="absolute bottom-4 right-4 z-20 rounded-full bg-white/90 px-4 py-2 text-sm font-semibold text-gray-900 shadow-lg hover:bg-white"
             >
               Comprar
             </button>

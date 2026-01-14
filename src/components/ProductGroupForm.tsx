@@ -288,69 +288,146 @@ export function ProductGroupForm({ group, category, onSave, onCancel, darkMode }
         const updatedGroup = await res.json();
         onSave({ ...formData, id: group.id, image: updatedGroup.urlFoto });
 
+        const groupId = Number(group.id);
         const newVariants = formData.variants.filter((variant) => variant.isNew);
-        if (newVariants.length > 0) {
-          const defaultTallaId = tallas[0]?.id;
-          const groupId = Number(group.id);
-          const creationErrors: string[] = [];
+        const existingVariants = formData.variants.filter((variant) => !variant.isNew);
+        const creationErrors: string[] = [];
 
-          const payloads = newVariants.map((variant) => {
-            const resolvedTallaId = category === "Anillos" ? variant.tallaId : defaultTallaId;
-            if (!variant.colorId) {
-              creationErrors.push(`Selecciona un color para la variante ${variant.color || variant.id}`);
-              return null;
-            }
-            if (!resolvedTallaId) {
-              creationErrors.push(`No hay talla disponible para la variante ${variant.color || variant.id}`);
-              return null;
-            }
-            return {
-              idGrupoProducto: groupId,
-              idColor: variant.colorId,
-              idTalla: resolvedTallaId,
-              precio: variant.price,
-              stock: variant.stock,
-              sku: variant.sku || undefined,
-              urlFoto: variant.imageUrl || undefined,
-            };
-          }).filter(Boolean) as Array<{
+        const createTasks = newVariants.map((variant) => {
+          if (!variant.colorId) {
+            creationErrors.push(`Selecciona un color para la variante ${variant.color || variant.id}`);
+            return null;
+          }
+          if (category === "Anillos" && !variant.tallaId) {
+            creationErrors.push(`Selecciona una talla para la variante ${variant.color || variant.id}`);
+            return null;
+          }
+
+          const payload: {
             idGrupoProducto: number;
             idColor: number;
-            idTalla: number;
+            idTalla?: number | null;
             precio: number;
             stock: number;
             sku?: string;
             urlFoto?: string;
-          }>;
+          } = {
+            idGrupoProducto: groupId,
+            idColor: variant.colorId,
+            precio: variant.price,
+            stock: variant.stock,
+            sku: variant.sku || undefined,
+            urlFoto: variant.imageUrl || undefined,
+          };
 
-          if (creationErrors.length) {
-            alert(creationErrors.join('\n'));
-            return;
+          if (category === "Anillos") {
+            payload.idTalla = variant.tallaId ?? null;
+          } else if (variant.tallaId) {
+            payload.idTalla = variant.tallaId;
           }
 
-          const results = await Promise.allSettled(
-            payloads.map((payload) =>
-              fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/productos`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              }),
-            ),
-          );
+          return (async () => {
+            const createRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/productos`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
 
-          const failed = results.filter(
-            (result) => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.ok),
-          );
-          if (failed.length) {
-            alert('Algunas variantes no se pudieron guardar como productos.');
-          } else {
-            setFormData(prev => ({
-              ...prev,
-              variants: prev.variants.map((variant) =>
-                variant.isNew ? { ...variant, isNew: false } : variant,
-              ),
-            }));
+            if (!createRes.ok) {
+              const errorText = await createRes.text();
+              throw new Error(errorText || 'Error al crear producto');
+            }
+            const created = await createRes.json();
+            return { tempId: variant.id, created };
+          })();
+        }).filter(Boolean) as Array<Promise<{ tempId: string; created: any }>>;
+
+        if (creationErrors.length) {
+          alert(creationErrors.join('\n'));
+          return;
+        }
+
+        const updateTasks = existingVariants.map((variant) => (async () => {
+          const updatePayload: {
+            idColor?: number | null;
+            idTalla?: number | null;
+            precio?: number;
+            stock?: number;
+            sku?: string | null;
+            urlFoto?: string | null;
+          } = {
+            precio: variant.price,
+            stock: variant.stock,
+          };
+
+          if (variant.colorId) {
+            updatePayload.idColor = variant.colorId;
           }
+          if (category === "Anillos") {
+            updatePayload.idTalla = variant.tallaId ?? null;
+          }
+          if (variant.sku !== undefined) {
+            updatePayload.sku = variant.sku || null;
+          }
+          if (variant.imageUrl !== undefined) {
+            updatePayload.urlFoto = variant.imageUrl || null;
+          }
+
+          const updateRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/productos/${variant.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updatePayload),
+          });
+
+          if (!updateRes.ok) {
+            const errorText = await updateRes.text();
+            throw new Error(errorText || 'Error al actualizar producto');
+          }
+          const updated = await updateRes.json();
+          return { tempId: variant.id, updated };
+        })());
+
+        const createResults = createTasks.length ? await Promise.allSettled(createTasks) : [];
+        const updateResults = updateTasks.length ? await Promise.allSettled(updateTasks) : [];
+
+        const failedCreates = createResults.filter((result) => result.status === 'rejected');
+        const failedUpdates = updateResults.filter((result) => result.status === 'rejected');
+
+        if (failedCreates.length || failedUpdates.length) {
+          failedCreates.forEach((result) => {
+            if (result.status === 'rejected') {
+              console.error('Error creando variante:', result.reason);
+            }
+          });
+          failedUpdates.forEach((result) => {
+            if (result.status === 'rejected') {
+              console.error('Error actualizando variante:', result.reason);
+            }
+          });
+          alert('Algunas variantes no se pudieron guardar. Revisa los datos e intenta otra vez.');
+        }
+
+        if (createResults.length) {
+          setFormData(prev => ({
+            ...prev,
+            variants: prev.variants.map((variant) => {
+              if (!variant.isNew) {
+                return variant;
+              }
+              const created = createResults.find((result) =>
+                result.status === 'fulfilled' && result.value.tempId === variant.id
+              );
+              if (created && created.status === 'fulfilled') {
+                const createdData = created.value.created;
+                return {
+                  ...variant,
+                  id: createdData?.id ? String(createdData.id) : variant.id,
+                  isNew: false,
+                };
+              }
+              return variant;
+            }),
+          }));
         }
 
       } catch (error) {
